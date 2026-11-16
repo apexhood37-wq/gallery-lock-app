@@ -1,0 +1,269 @@
+const SAMPLE_IMAGES = [
+  {
+    id: 1,
+    name: 'Sunset View',
+    src: 'https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=1200&q=80',
+  },
+  {
+    id: 2,
+    name: 'Coastal Calm',
+    src: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=1200&q=80',
+  },
+  {
+    id: 3,
+    name: 'Forest Trail',
+    src: 'https://images.unsplash.com/photo-1441974231531-c6227db76b6e?auto=format&fit=crop&w=1200&q=80',
+  },
+  {
+    id: 4,
+    name: 'Mountain Escape',
+    src: 'https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?auto=format&fit=crop&w=1200&q=80',
+  },
+  {
+    id: 5,
+    name: 'City Lights',
+    src: 'https://images.unsplash.com/photo-1493246507139-91e8fad9978e?auto=format&fit=crop&w=1200&q=80',
+  },
+  {
+    id: 6,
+    name: 'Desert Dream',
+    src: 'https://images.unsplash.com/photo-1501785888041-af3ef285b470?auto=format&fit=crop&w=1200&q=80',
+  },
+];
+
+const STORAGE_KEYS = {
+  pin: 'gallery-vault-pin',
+  gallery: 'gallery-vault-images',
+};
+
+const app = document.querySelector('#app');
+
+const getStoredGallery = () => {
+  const stored = localStorage.getItem(STORAGE_KEYS.gallery);
+  if (!stored) return SAMPLE_IMAGES;
+
+  try {
+    return JSON.parse(stored);
+  } catch {
+    return SAMPLE_IMAGES;
+  }
+};
+
+const state = {
+  savedPin: localStorage.getItem(STORAGE_KEYS.pin) || '',
+  isLocked: !localStorage.getItem(STORAGE_KEYS.pin),
+  pinInput: '',
+  newPin: '',
+  confirmPin: '',
+  gallery: getStoredGallery(),
+  selectedImage: null,
+};
+
+function saveGallery() {
+  localStorage.setItem(STORAGE_KEYS.gallery, JSON.stringify(state.gallery));
+}
+
+function render() {
+  const isSetupMode = !state.savedPin;
+
+  app.innerHTML = `
+    <div class="app-shell">
+      ${state.isLocked ? `
+        <div class="lock-screen">
+          <div class="lock-card">
+            <div class="brand-row">
+              <span class="brand-mark">🔒</span>
+              <h1>Gallery Vault</h1>
+            </div>
+
+            ${isSetupMode ? `
+              <p class="lock-subtitle">Create a 4-digit PIN to protect your gallery.</p>
+              <input type="password" maxlength="4" inputmode="numeric" placeholder="New PIN" value="${state.newPin}" data-field="newPin" />
+              <input type="password" maxlength="4" inputmode="numeric" placeholder="Confirm PIN" value="${state.confirmPin}" data-field="confirmPin" />
+              <button data-action="setup-pin">Set PIN</button>
+            ` : `
+              <p class="lock-subtitle">Enter your PIN to view your private gallery.</p>
+              <input type="password" maxlength="4" inputmode="numeric" placeholder="Enter PIN" value="${state.pinInput}" data-field="pinInput" />
+              <button data-action="unlock">Unlock</button>
+            `}
+          </div>
+        </div>
+      ` : `
+        <div class="gallery-page">
+          <header class="topbar">
+            <div>
+              <p class="eyebrow">Private collection</p>
+              <h2>My Gallery</h2>
+            </div>
+
+            <div class="header-actions">
+              <label class="upload-button">
+                <input type="file" accept="image/*" multiple />
+                + Add Photos
+              </label>
+              <button class="ghost-button" data-action="change-pin">Change PIN</button>
+              <button class="ghost-button" data-action="lock">Lock</button>
+            </div>
+          </header>
+
+          <div class="gallery-grid">
+            ${state.gallery
+              .map(
+                (item) => `
+                  <article class="gallery-card">
+                    <img src="${item.src}" alt="${item.name}" data-action="open-image" data-id="${item.id}" />
+                    <div class="card-footer">
+                      <span>${item.name}</span>
+                      <button data-action="delete-image" data-id="${item.id}">Delete</button>
+                    </div>
+                  </article>
+                `
+              )
+              .join('')}
+          </div>
+
+          ${state.selectedImage ? `
+            <div class="modal-backdrop" data-action="close-modal">
+              <div class="modal" data-action="stop-propagation">
+                <img src="${state.selectedImage.src}" alt="${state.selectedImage.name}" />
+                <div class="modal-meta">
+                  <h3>${state.selectedImage.name}</h3>
+                  <button data-action="close-modal">Close</button>
+                </div>
+              </div>
+            </div>
+          ` : ''}
+        </div>
+      `}
+    </div>
+  `;
+
+  wireEvents();
+}
+
+function wireEvents() {
+  const inputFields = document.querySelectorAll('input[data-field]');
+  inputFields.forEach((field) => {
+    field.addEventListener('input', (event) => {
+      const key = event.target.dataset.field;
+      const raw = event.target.value.replace(/\D/g, '').slice(0, 4);
+      state[key] = raw;
+      render();
+    });
+  });
+
+  const actions = document.querySelectorAll('[data-action]');
+  actions.forEach((button) => {
+    const action = button.dataset.action;
+
+    button.addEventListener('click', (event) => {
+      if (action === 'setup-pin') {
+        if (state.newPin.length < 4) {
+          alert('Choose a 4-digit PIN.');
+          return;
+        }
+
+        if (state.newPin !== state.confirmPin) {
+          alert('PINs do not match.');
+          return;
+        }
+
+        localStorage.setItem(STORAGE_KEYS.pin, state.newPin);
+        state.savedPin = state.newPin;
+        state.newPin = '';
+        state.confirmPin = '';
+        state.isLocked = false;
+        render();
+        return;
+      }
+
+      if (action === 'unlock') {
+        if (state.pinInput === state.savedPin) {
+          state.isLocked = false;
+          state.pinInput = '';
+          render();
+          return;
+        }
+
+        alert('Incorrect PIN. Try again.');
+        state.pinInput = '';
+        render();
+        return;
+      }
+
+      if (action === 'lock') {
+        state.isLocked = true;
+        state.pinInput = '';
+        state.selectedImage = null;
+        render();
+        return;
+      }
+
+      if (action === 'change-pin') {
+        const current = window.prompt('Enter your current PIN');
+        if (current !== state.savedPin) {
+          alert('Current PIN is incorrect.');
+          return;
+        }
+
+        const next = window.prompt('Enter new 4-digit PIN');
+        if (!next || next.length < 4 || !/^\d{4}$/.test(next)) {
+          alert('New PIN must be exactly 4 digits.');
+          return;
+        }
+
+        localStorage.setItem(STORAGE_KEYS.pin, next);
+        state.savedPin = next;
+        alert('PIN changed successfully.');
+        return;
+      }
+
+      if (action === 'delete-image') {
+        const id = Number(button.dataset.id);
+        state.gallery = state.gallery.filter((item) => item.id !== id);
+        saveGallery();
+        render();
+        return;
+      }
+
+      if (action === 'open-image') {
+        const id = Number(button.dataset.id);
+        const image = state.gallery.find((item) => item.id === id);
+        state.selectedImage = image || null;
+        render();
+        return;
+      }
+
+      if (action === 'close-modal') {
+        state.selectedImage = null;
+        render();
+      }
+    });
+  });
+
+  const fileInput = document.querySelector('input[type="file"]');
+  if (fileInput) {
+    fileInput.addEventListener('change', (event) => {
+      const files = Array.from(event.target.files || []);
+      const accepted = files
+        .filter((file) => file.type.startsWith('image/'))
+        .map((file) => ({
+          id: Date.now() + Math.random(),
+          name: file.name,
+          src: URL.createObjectURL(file),
+        }));
+
+      if (!accepted.length) {
+        alert('Please upload image files only.');
+        return;
+      }
+
+      state.gallery = [...accepted, ...state.gallery];
+      saveGallery();
+      render();
+      event.target.value = '';
+    });
+  }
+}
+
+render();
